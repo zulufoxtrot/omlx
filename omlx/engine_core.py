@@ -472,6 +472,12 @@ class EngineCore:
                 except asyncio.TimeoutError:
                     logger.warning(f"Timeout waiting for request {request_id}")
                     break
+                except asyncio.CancelledError:
+                    # Client disconnected or task was cancelled - abort the request
+                    # to free scheduler/GPU resources (prevents orphaned requests)
+                    logger.info(f"Request {request_id} cancelled during streaming, aborting")
+                    await self.abort_request(request_id)
+                    raise
 
         finally:
             self._cleanup_request(request_id)
