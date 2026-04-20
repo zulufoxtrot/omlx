@@ -1472,7 +1472,9 @@ async def load_model(
         raise HTTPException(status_code=409, detail=f"Model is already loading: {model_id}")
 
     try:
-        await engine_pool.get_engine(model_id)
+        # Use the admin lock to avoid blocking on API request operations
+        async with engine_pool._admin_lock:
+            await engine_pool.get_engine(model_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -91,6 +91,9 @@ class EnginePool:
         """
         self._entries: dict[str, EngineEntry] = {}
         self._lock = asyncio.Lock()
+        # Separate lock for admin operations to avoid blocking dashboard requests
+        # when API requests are holding the main lock during model loading/eviction.
+        self._admin_lock = asyncio.Lock()
         self._max_model_memory = max_model_memory
         self._current_model_memory = 0
         self._scheduler_config = scheduler_config or SchedulerConfig()
