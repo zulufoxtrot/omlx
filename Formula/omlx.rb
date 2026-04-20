@@ -1,11 +1,11 @@
 class Omlx < Formula
   desc "LLM inference server optimized for Apple Silicon"
-  homepage "https://github.com/jundot/omlx"
-  url "https://github.com/jundot/omlx/archive/refs/tags/v0.3.6.tar.gz"
+  homepage "https://github.com/zulufoxtrot/omlx"
+  url "https://github.com/zulufoxtrot/omlx/archive/refs/tags/v0.3.6.tar.gz"
   sha256 "61135fcc60ca7f9b2a9da3d6c06646963a374f9173918d484916933636ab058b"
   license "Apache-2.0"
 
-  head "https://github.com/jundot/omlx.git", branch: "main"
+  head "https://github.com/zulufoxtrot/omlx.git", branch: "main"
 
   option "with-grammar", "Install xgrammar for structured output (requires torch, ~2GB)"
 
