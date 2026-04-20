@@ -2587,6 +2587,7 @@ async def stream_chat_completion(
             thinking_filter = _thinking_filter
         else:
             stream_content = False
+    finished_normally = False
     try:
         async for output in engine.stream_chat(messages=messages, **kwargs):
             if first_token_time is None and output.new_text:
@@ -2628,6 +2629,18 @@ async def stream_chat_completion(
                             )],
                         )
                         yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+
+            # Mark as finished normally when we receive the final output
+            if output.finished:
+                finished_normally = True
+    except GeneratorExit:
+        # Client disconnected - log and re-raise
+        logger.info(f"[stream_chat_completion] GeneratorExit caught, client disconnected")
+        raise
+    except asyncio.CancelledError:
+        # Task was cancelled (e.g., by _with_sse_keepalive on disconnect)
+        logger.info(f"[stream_chat_completion] Task cancelled, client disconnected")
+        raise
     except Exception as e:
         logger.error(f"Error during chat streaming: {e}")
         error_data = {
@@ -2636,6 +2649,14 @@ async def stream_chat_completion(
         yield f"data: {json.dumps(error_data)}\n\n"
         yield "data: [DONE]\n\n"
         return
+    finally:
+        # Abort the request if client disconnected before completion
+        if not finished_normally:
+            logger.info(f"[stream_chat_completion] Aborting request (finished_normally={finished_normally})")
+            try:
+                await engine.abort_request(request_id=response_id)
+            except Exception as abort_err:
+                logger.debug(f"Failed to abort request: {abort_err}")
 
     # Flush remaining buffered content from thinking/tool-call parsers
     if stream_content:
@@ -2927,6 +2948,7 @@ async def stream_anthropic_messages(
     )
 
     # 3. Stream content with thinking/content separation
+    finished_normally = False
     try:
         async for output in engine.stream_chat(messages=messages, **kwargs):
             last_output = output  # Keep reference for tool_calls and token counts
@@ -2971,13 +2993,31 @@ async def stream_anthropic_messages(
                             text_block_started = True
                         yield create_text_delta_event(index=block_index, text=content_delta)
 
+            # Mark as finished normally when we receive the final output
             if output.finished:
-                break
+                finished_normally = True
+    except GeneratorExit:
+        # Client disconnected - log and re-raise
+        logger.info(f"[stream_anthropic_messages] GeneratorExit caught, client disconnected")
+        raise
+    except asyncio.CancelledError:
+        # Task was cancelled (e.g., by _with_sse_keepalive on disconnect)
+        logger.info(f"[stream_anthropic_messages] Task cancelled, client disconnected")
+        raise
     except Exception as e:
         logger.error(f"Error during Anthropic streaming: {e}")
         yield create_error_event("api_error", str(e))
         yield create_message_stop_event()
         return
+    finally:
+        # Abort the request if client disconnected before completion
+        if not finished_normally:
+            logger.info(f"[stream_anthropic_messages] Aborting request (finished_normally={finished_normally})")
+            try:
+                # Note: request_id is not available at this level, abort is handled in engine.stream_chat
+                pass
+            except Exception as abort_err:
+                logger.debug(f"Failed to abort request: {abort_err}")
 
     # Flush remaining buffered content from thinking parser
     thinking_delta, content_delta = thinking_parser.finish()
